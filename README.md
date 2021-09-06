@@ -4,7 +4,9 @@ CRC Beagle is a tool for reverse engineering CRCs. It is designed for commnicati
 
 The advantage of this technique is it allows recovery of an "effective equivalent" CRC even in cases where the algorithm uses non-standard parameters for XOR-in or XOR-out (a common obfuscation technique).
 
-The [CRC RevEng tool by Greg Cook](https://reveng.sourceforge.io/) is a more mature tool. I started CRC Beagle to (a) use Python which I find much easier to modify, and (b) when CRC RevEng failed to recover a CRC for a device I was looking at, and it was difficult to understand why.
+The [CRC RevEng tool by Greg Cook](https://reveng.sourceforge.io/) is a more mature tool, I haven't implemented as much. I started CRC Beagle to (a) use Python which I find much easier to modify, and (b) when CRC RevEng failed to recover a CRC for a device I was looking at, and it was difficult to understand why.
+
+CRC Beagle has some other handy features, such as giving you the code you need to create valid CRCs with a copy-paste. It also checks inputs when running on 8-bit CRCs to see if it's just a simple checksum and not a real CRC.
 
 Hopefully you find CRC Beagle useful, but this is hardly a novel creation, so the credit goes to those who built up the foundation.
 
@@ -63,7 +65,15 @@ If you have multiple message lengths this solution may be valid for this only.
 
 ## Important Limitations
 
-The CRC differential technique packs all of the "constant bytes" into the XOR-in and XOR-out parameters.
+The CRC differential technique packs all of the "constant bytes" into the  XOR-out parameters.
+
+Constants that occur at the start of the CRC are transformed by the CRC operation. This transformation depends on the number of cyclic shifts - that means the constant *changes* for different lengths of messages, since the number of cyclic shifts changes every time you 'add' a byte to the CRC.
+
+If you can find the 'actual' XOR-in settings, or how many bytes the operation takes, you will have a more generic function.
+
+However in practice I find that many communication protocols only transmit certain length messages. Thus having different XOR-out values for each message length isn't a major problem for the purpose of interoperating with the original system.
+
+This tool doesn't try to be too clever and just spits out settings for each message length you gave it.
 
 ## How it Works
 
