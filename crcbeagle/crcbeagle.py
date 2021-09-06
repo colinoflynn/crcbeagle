@@ -102,7 +102,12 @@ class CRCBeagle(object):
         """
         print(self.str_crc_example(crcdict, message))
     
-    def search(self, messages, crcs, print_examples=True):
+    def validate_inputs(self, messages, crcs):
+        """
+        Sanity checks input data, such as CRC lengths match. Prints status of
+        input parameters for user pleasure.
+        """
+        
         if len(messages) != len(crcs):
             raise ValueError("Length of message & crc arrays don't match: %d, %d"%(len(messages), len(crcs)))
         
@@ -133,15 +138,59 @@ class CRCBeagle(object):
         
         if crclen != 1 and crclen != 2 and crclen != 4:
             raise("Detected %d-bit CRC, not supported"%(crclen *8))
-
+        
         print("Input parameters:")
         print("    %d-bit CRC size"%(crclen * 8))
         print("    %d total messages, with:"%len(messages))
         for k in message_size_dict.keys():
             print("      %2d messages with %d byte payload"%(message_size_dict[k]["num"], k))
         
+        self.message_size_dict = message_size_dict
+        self.crclen = crclen
+    
+    def search_linear(self, messages, crcs, print_examples=True):
+        
+        if self.crclen == 1:
+            logging.info("Checking for linear code")
+        else:
+            logging.info("16-bit or 32-bit CRC, skipping linear code check")
+            return False
+        
+        diffout = []
+        
+        for i, m in enumerate(messages):
+            test = 0
+            for d in m:
+                test += d
+            test &= 0xff
+            diffout.append(test ^ crcs[i][0])
+
+        if len(set(diffout)) == 1:
+            print("\nPossible linear code and not CRC: sum(m) XOR 0x%02X"%diffout[0])
+            print("This solution works on all %d inputs!"%len(messages))
+            
+            if print_examples:
+                print("********** example usage *************")
+                print("def my_checksum(message):")
+                print("  checksum = 0")
+                print("  for d in message:")
+                print("    checksum += d")
+                print("  checksum = (checksum & 0xff) ^ 0x%02x"%diffout[0])
+                print("  return checksum")
+                print("**************************************")
+            return True
+        
+        return False
+    
+    def search(self, messages, crcs, print_examples=True):
+
+        self.validate_inputs(messages, crcs)
+        message_size_dict = self.message_size_dict
+
         if len(message_size_dict.keys()) == 1:
-            print("NOTE: Output parameters will be specific to this message size only. Pass different length messages if possible.")
+            print("NOTE: Output parameters may be specific to this message size only. Pass different length messages if possible.")
+        
+        self.search_linear(messages, crcs, print_examples)
         
         candidates = []
         
@@ -160,21 +209,23 @@ class CRCBeagle(object):
                         logging.info("Using diff between message %d & %d"%(idx, idx+1))
                         
                         for d in ALLCRCCLASSES:
-                            if d._width == crclen * 8:
+                            if d._width == self.crclen * 8:
+
+                                res = d.calc(messages[idx])
                                 
                                 # We'll figure out actual XOR output later
-                                d._xor_output  = 0
+                                d._xor_output  = 0                                
                                 
                                 res = d.calc(diff)
                                 
                                 #Deal with unknown CRC order, kinda hacky but YOLO
-                                if crclen == 1:
+                                if self.crclen == 1:
                                     if diffcrc[0] == res:
                                         candidates.append({"class":d, "order":"le"})
                                     packstr = "B"
                                         
-                                if crclen == 2 or crclen == 4:
-                                    if crclen == 2:
+                                if self.crclen == 2 or self.crclen == 4:
+                                    if self.crclen == 2:
                                         packstr = "H"
                                     else:
                                         packstr = "I"
@@ -191,11 +242,11 @@ class CRCBeagle(object):
                             #Convert to string to make validating in set easier, will convert back later
                             newc = "poly:"+hex(c["class"]._poly)+" reflectin:"+str(c["class"]._reflect_input) +\
                                    " reflectout:"+str(c["class"]._reflect_output)+" init:"+hex(c["class"]._initvalue) +\
-                                   " order:"+c["order"] + " crclen:"+str(crclen)
+                                   " order:"+c["order"] + " crclen:"+str(self.crclen)
                             cset.add(newc)
                         
                         if len(cset) == 0:
-                            logging.warning("No paramteres for difference messages"%(idx, idx+1))
+                            logging.warning("No parameters for difference messages %d to %d"%(idx, idx+1))
                         else:
                             logging.info("Parameters for difference messages: %s"%str(cset))
                         diffsets.append(cset)
@@ -226,11 +277,11 @@ class CRCBeagle(object):
                     crcdict['reflectin'] = crcdict['reflectin'] == "True"
                     crcdict['reflectout'] = crcdict['reflectout'] == "True"
                     
-                    if crclen == 1:
+                    if self.crclen == 1:
                         crc = Crc8Base
-                    elif crclen == 2:
+                    elif self.crclen == 2:
                         crc = Crc16Base
-                    elif crclen == 4:
+                    elif self.crclen == 4:
                         crc = Crc32Base
                     
                     packstr = self.crcdict_to_packstr(crcdict)

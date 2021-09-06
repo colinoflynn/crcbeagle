@@ -1,4 +1,4 @@
-#CRC Beagle
+# CRC Beagle
 
 CRC Beagle is a tool for reverse engineering CRCs. It is designed for commnication protocols where you often have several messages of the same length. This allows CRC Beagle to use the CRC Differential Technique described by Method by Gregory Ewing described in [Reverse-Engineering a CRC Algorithm](http://www.cosc.canterbury.ac.nz/greg.ewing/essays/CRC-Reverse-Engineering.html)
 
