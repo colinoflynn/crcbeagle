@@ -1,6 +1,6 @@
 # CRC Beagle
 
-CRC Beagle is a tool for reverse engineering CRCs. It is designed for commnication protocols where you often have several messages of the same length. This allows CRC Beagle to use the CRC Differential Technique described by Method by Gregory Ewing described in [Reverse-Engineering a CRC Algorithm](http://www.cosc.canterbury.ac.nz/greg.ewing/essays/CRC-Reverse-Engineering.html)
+CRC Beagle is a tool for reverse engineering CRCs. It is designed for commnication protocols where you often have several messages of the same length. This allows CRC Beagle to use the CRC Differential Technique described by Gregory Ewing described in [Reverse-Engineering a CRC Algorithm](http://www.cosc.canterbury.ac.nz/greg.ewing/essays/CRC-Reverse-Engineering.html)
 
 The advantage of this technique is it allows recovery of an "effective equivalent" CRC even in cases where the algorithm uses non-standard parameters for XOR-in or XOR-out (a common obfuscation technique).
 
@@ -74,6 +74,7 @@ If you can find the 'actual' XOR-in settings, or how many bytes the operation ta
 However in practice I find that many communication protocols only transmit certain length messages. Thus having different XOR-out values for each message length isn't a major problem for the purpose of interoperating with the original system.
 
 This tool doesn't try to be too clever and just spits out settings for each message length you gave it.
+
 
 ## How it Works
 
