@@ -77,3 +77,17 @@ This tool doesn't try to be too clever and just spits out settings for each mess
 
 ## How it Works
 
+While you can just brute-force CRC parameters with a given message, this has some complexities in practice. You may not know what exactly is covered by the CRC - for example most protocols have some 'start of frame' characters. They may also add padding to the message before being passed to the CRC algorhtm.
+
+As described by Gregory Ewing described in [Reverse-Engineering a CRC Algorithm](http://www.cosc.canterbury.ac.nz/greg.ewing/essays/CRC-Reverse-Engineering.html), you can take advantage of the fact CRC can be broken down into several components. A typical CRC operation of message *m1* could be considered as:
+
+CRC(*m1*) = CRC(*fixedin*) ^ CRC(*m1'*) ^ *fixedout*
+
+Where *m1'* is a variable portion of *m1*. Some of the *fixedin* comes from the CRC algorithm, some of it could come from the CRC of fixed parameters.
+
+This means if you take CRC(*m1*) ^ CRC(*m2*), you cancel the common terms, and are left with CRC(*m1'*) ^ CRC(*m2'*). In fact, this is equivalent to CRC(*m1* ^ *m2*).
+
+The last point means we can take two messages which we have a known CRC for, xor the messages together, and then we can try to simply find the CRC polynomial (ignoring the input & output settings). Any constant terms we can ignore, whether they come from the CRC parameter or the CRC usage (such as including a constant header byte).
+
+With the polynomial known, all the fixed input data CRC(*fixedin*) becomes a constant we can roll into a single variable. Note that this constant changes with different message lengths, but you can still achieve interoperability in most cases.
+

@@ -1,3 +1,17 @@
+#
+# CRC Beagle, automatic CRC/Checksum detection for communication protocols.
+#
+# Copyright (C) Colin O'Flynn, 2021.
+#
+# See https://github.com/colinoflynn/crcbeagle for more details.
+#
+# See LICENSE file for distribution requirements.
+#
+# CRC differential technique based on Gregory Ewing
+# https://www.cosc.canterbury.ac.nz/greg.ewing/essays/CRC-Reverse-Engineering.html
+#
+
+
 import logging
 import struct
 
@@ -149,6 +163,12 @@ class CRCBeagle(object):
         self.crclen = crclen
     
     def search_linear(self, messages, crcs, print_examples=True):
+        """
+        Checks if a simple checksum can provide the required CRC,
+        currently only valid for 8-bit 'crc'. Used to confirm the
+        device hasn't just implemented a simple checksum instead of
+        a real crc.
+        """
         
         if self.crclen == 1:
             logging.info("Checking for linear code")
@@ -157,6 +177,8 @@ class CRCBeagle(object):
             return False
         
         diffout = []
+        
+        # Linear code that is a real checksum
         
         for i, m in enumerate(messages):
             test = 0
@@ -179,10 +201,44 @@ class CRCBeagle(object):
                 print("  return checksum")
                 print("**************************************")
             return True
+
+        diffout = []
+        
+        # Linear code that XORs each byte
+        
+        for i, m in enumerate(messages):
+            test = 0
+            for d in m:
+                test ^= d
+            test &= 0xff
+            diffout.append(test ^ crcs[i][0])
+        
+        if len(set(diffout)) == 1:
+            print("\nPossible linear code and not CRC: xorsum(m) XOR 0x%02X"%diffout[0])
+            print("This solution works on all %d inputs!"%len(messages))
+            
+            if print_examples:
+                print("********** example usage *************")
+                print("def my_checksum(message):")
+                print("  checksum = 0")
+                print("  for d in message:")
+                print("    checksum ^= d")
+                print("  checksum = (checksum & 0xff) ^ 0x%02x"%diffout[0])
+                print("  return checksum")
+                print("**************************************")
+            return True
         
         return False
     
     def search(self, messages, crcs, print_examples=True):
+        """
+        Uses input `messages`-`crcs` pairs to find potential crc parameters.
+        
+        Normally the crc would just be the ending bytes of the message. The crc size
+        is detected based on number of bytes for each crc. The crc endianness will be
+        auto detected, so pass the crc in the same manner as used in your communication
+        protocol.
+        """
 
         self.validate_inputs(messages, crcs)
         message_size_dict = self.message_size_dict
