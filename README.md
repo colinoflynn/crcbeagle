@@ -85,9 +85,17 @@ CRC(*m1*) = CRC(*fixedin*) ^ CRC(*m1'*) ^ *fixedout*
 
 Where *m1'* is a variable portion of *m1*. Some of the *fixedin* comes from the CRC algorithm, some of it could come from the CRC of fixed parameters.
 
-This means if you take CRC(*m1*) ^ CRC(*m2*), you cancel the common terms, and are left with CRC(*m1'*) ^ CRC(*m2'*). In fact, this is equivalent to CRC(*m1* ^ *m2*).
+This means if you take the XOR of the CRC portion of two messages:
 
-The last point means we can take two messages which we have a known CRC for, xor the messages together, and then we can try to simply find the CRC polynomial (ignoring the input & output settings). Any constant terms we can ignore, whether they come from the CRC parameter or the CRC usage (such as including a constant header byte).
+CRC(*m1*) ^ CRC(*m2*) = [CRC(*fixedin*) ^ CRC(*m1'*) ^ *fixedout*] ^ [CRC(*fixedin*) ^ CRC(*m2'*) ^ *fixedout*]
+
+You cancel the common terms, and are left with:
+
+CRC(*m1*) ^ CRC(*m2*) = CRC(*m1'*) ^ CRC(*m2'*)
+
+The advantage of this is that we have removed the fixed portion. This is much easier to brute-force since we now only have to worry about what the polynomial of CRC() was (and a few other issues such as bit/byte ordering).
+
+We can take two messages which we have a known CRC for, xor the messages together, and then we can try to simply find the CRC polynomial (ignoring the input & output settings). Any constant terms we can ignore, whether they come from the CRC parameter or the CRC usage (such as including a constant header byte).
 
 With the polynomial known, all the fixed input data CRC(*fixedin*) becomes a constant we can roll into a single variable. Note that this constant changes with different message lengths, but you can still achieve interoperability in most cases.
 
