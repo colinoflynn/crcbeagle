@@ -258,19 +258,26 @@ class CRCBeagle(object):
             if message_size_dict[message_len]["num"] > 1:
                 #Need at least two messages of this length to do difference...
                 diffsets = []
-                for idx in message_size_dict[message_len]["indexes"]:
+                for i, idx in enumerate(message_size_dict[message_len]["indexes"]):
                     try:
-                        diff = [messages[idx][i] ^ messages[idx+1][i] for i in range(0, len(messages[idx]))]
-                        diffcrc = [crcs[idx][i] ^ crcs[idx+1][i] for i in range(0, len(crcs[idx]))]
-                        logging.info("Using diff between message %d & %d"%(idx, idx+1))
+                        msg1idx = message_size_dict[message_len]["indexes"][i+0]
+                        msg2idx = message_size_dict[message_len]["indexes"][i+1]
+                        logging.info("Using diff between message %d & %d"%(msg1idx, msg2idx))
+                        diff = [messages[msg1idx][i] ^ messages[msg2idx][i] for i in range(0, len(messages[msg1idx]))]
+                        diffcrc = [crcs[msg1idx][i] ^ crcs[msg2idx][i] for i in range(0, len(crcs[msg1idx]))]                        
                         
                         for d in ALLCRCCLASSES:
                             if d._width == self.crclen * 8:
-
-                                res = d.calc(messages[idx])
+                                
+                                logging.debug("Trying class: %r"%d)
+                                
+                                res = d.calc(messages[msg1idx])
                                 
                                 # We'll figure out actual XOR output later
-                                d._xor_output  = 0                                
+                                d._xor_output  = 0
+                                d._initvalue  = 0 # This will get packed into _xor_output
+                                                  # at some point should be smarter about it, and set
+                                                  # init value to 'real' one to see if that is case.
                                 
                                 res = d.calc(diff)
                                 
@@ -302,75 +309,81 @@ class CRCBeagle(object):
                             cset.add(newc)
                         
                         if len(cset) == 0:
-                            logging.warning("No parameters for difference messages %d to %d"%(idx, idx+1))
+                            logging.warning("No parameters for difference messages %d to %d"%(msg1idx, msg2idx))
                         else:
                             logging.info("Parameters for difference messages: %s"%str(cset))
                         diffsets.append(cset)
-                    except IndexError:
+                    except IndexError as e:
+                        #TODO - overextends itself and uses execption to figure out end, shoudl be smarter
+                        logging.debug("Exception - hopefully correct one: %r"%e)
                         break
                 logging.info("For %d diffs of length %d, found sets: %s"%(len(message_size_dict[message_len]["indexes"])-1, message_len, str(diffsets)))
                 
-                intersect = set.intersection(*diffsets)
+                if len(diffsets) == 0:
+                    print("  Failed to find solution.")
+                else:                
+                    intersect = set.intersection(*diffsets)
                 
-                if len(intersect) == 0:
-                    if len(diffsets) > 0:
-                        print("  Failed to find common solution. Possible solutions: %s"%(str(diffsets)))
+                    if len(intersect) == 0:
+                        if len(diffsets) > 0:
+                            print("  Failed to find common solution. Possible solutions: %s"%(str(diffsets)))
+                        else:
+                            print("  Failed to find any solutions. Possibly not a real CRC, implementation error, or non-standard polynomial")
+                    elif len(intersect) == 1:
+                        print("  Found single likely solution for differences of len=%d, yah!"%(message_len))
                     else:
-                        print("  Failed to find any solutions. Possibly not a real CRC, implementation error, or non-standard polynomial")
-                elif len(intersect) == 1:
-                    print("  Found single likely solution for differences of len=%d, yah!"%(message_len))
-                else:
-                    print("  Found multiple solutions for differences of len=%d"%(message_len))
+                        print("  Found multiple solutions for differences of len=%d"%(message_len))
                     
-                for sol in intersect:
-                    #Calc crc
-                    test = [a.split(":") for a in sol.split(" ")]
-                    crcdict = { a[0]:a[1] for a in test }
-                    #Convert from str back to dict
-                    crcdict['crclen'] = int(crcdict['crclen'])
-                    crcdict['poly'] = int(crcdict['poly'], 16)
-                    crcdict['init'] = int(crcdict['init'], 16)
-                    crcdict['reflectin'] = crcdict['reflectin'] == "True"
-                    crcdict['reflectout'] = crcdict['reflectout'] == "True"
-                    
-                    if self.crclen == 1:
-                        crc = Crc8Base
-                    elif self.crclen == 2:
-                        crc = Crc16Base
-                    elif self.crclen == 4:
-                        crc = Crc32Base
-                    
-                    packstr = self.crcdict_to_packstr(crcdict)
-                    
-                    crc._poly = crcdict['poly']
-                    crc._reflect_input = crcdict['reflectin']
-                    crc._reflect_output = crcdict['reflectout']
-                    crc._initvalue = crcdict['init']
-                    crc._xor_output = 0
-                    
-                    crcouts = []
-                    
-                    for idx in message_size_dict[message_len]["indexes"]:
-                        testcrc = crc.calc(messages[idx])
-                        realcrc = struct.unpack(packstr, bytes(crcs[idx]))[0]
-                        crcouts.append(testcrc ^ realcrc)
-                    
-                    xorout = set(crcouts)
-                    
-                    if len(xorout) == 1:
-                        print("  Found single XOR-out value for len = %d: 0x%X"%(message_len, crcouts[0]))
-                        crcdict['xor_output'] = list(xorout)[0]
+                    for sol in intersect:
+                        #Calc crc
+                        test = [a.split(":") for a in sol.split(" ")]
+                        crcdict = { a[0]:a[1] for a in test }
+                        #Convert from str back to dict
+                        crcdict['crclen'] = int(crcdict['crclen'])
+                        crcdict['poly'] = int(crcdict['poly'], 16)
+                        crcdict['init'] = int(crcdict['init'], 16)
+                        crcdict['reflectin'] = crcdict['reflectin'] == "True"
+                        crcdict['reflectout'] = crcdict['reflectout'] == "True"
                         
-                        if print_examples:
-                            print("********** example usage *************")
-                            self.print_crc_example(crcdict, messages[message_size_dict[message_len]["indexes"][0]])
-                            print("**************************************")
+                        if self.crclen == 1:
+                            crc = Crc8Base
+                        elif self.crclen == 2:
+                            crc = Crc16Base
+                        elif self.crclen == 4:
+                            crc = Crc32Base
                         
-                        print("If you have multiple message lengths this solution may be valid for this only.")
+                        packstr = self.crcdict_to_packstr(crcdict)
+                        
+                        crc._poly = crcdict['poly']
+                        crc._reflect_input = crcdict['reflectin']
+                        crc._reflect_output = crcdict['reflectout']
+                        crc._initvalue = crcdict['init']
+                        crc._xor_output = 0
+                        
+                        crcouts = []
+                        
+                        for idx in message_size_dict[message_len]["indexes"]:
+                            testcrc = crc.calc(messages[idx])
+                            realcrc = struct.unpack(packstr, bytes(crcs[idx]))[0]
+                            crcouts.append(testcrc ^ realcrc)
+                        
+                        xorout = set(crcouts)
+                        
+                        if len(xorout) == 1:
+                            print("  Found single XOR-out value for len = %d: 0x%X"%(message_len, crcouts[0]))
+                            crcdict['xor_output'] = list(xorout)[0]
+                            
+                            if print_examples:
+                                print("********** example usage *************")
+                                self.print_crc_example(crcdict, messages[message_size_dict[message_len]["indexes"][0]])
+                                print("**************************************")
+                            
+                            print("If you have multiple message lengths this solution may be valid for this only.")
 
-                    else:
-                        print("Multiple XOR-out solutions, **SOLVE FAILED**. Debugging info only:")
-                        print(xorout)
-                        crcdict['xor_output'] = None
-
+                        else:
+                            print("Multiple XOR-out solutions, **SOLVE FAILED**. Debugging info only:")
+                            print(xorout)
+                            crcdict['xor_output'] = None
+            else:
+                print("  Single message of this sized - skipped for now")
                     
